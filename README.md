@@ -77,13 +77,14 @@ In ``evaluations/dtu/BaseEvalMain_web.m``, set `dataPath` as the path to `Sample
 * In ``eval_tanks.sh``, set `TANK_TESTING` as the root directory of the dataset and `--outdir` as the directory to store the reconstructed point clouds. 
 * `CKPT_FILE` is the path of checkpoint file (default as our pretrained model which is trained on DTU, the path is `checkpoints/dtu/model_000015.ckpt`). We also provide our pretrained model trained on BlendedMVS (`checkpoints/blendedmvs/model_000015.ckpt`)
 * Test on GPU by running `bash eval_tanks.sh`. The code includes depth map estimation and depth fusion. The outputs are the point clouds in `ply` format. 
+* For our detailed quantitative results on Tanks & Temples, please check the leaderboards ([Tanks & Temples: trained on DTU](https://www.tanksandtemples.org/details/2566/), [Tanks & Temples: trained on BlendedMVS](https://www.tanksandtemples.org/details/2679//).
 
 ### Evaluation on ETH3D:
 * In ``eval_eth.sh``, set `ETH3D_TESTING` as the root directory of the dataset and `--outdir` as the directory to store the reconstructed point clouds. 
 * `CKPT_FILE` is the path of checkpoint file (default as our pretrained model which is trained on DTU, the path is `checkpoints/dtu/model_000015.ckpt`). We also provide our pretrained model trained on BlendedMVS (`checkpoints/blendedmvs/model_000015.ckpt`)
 * Test on GPU by running `bash eval_eth.sh`. The code includes depth map estimation and depth fusion. The outputs are the point clouds in `ply` format. 
 
-* For our detailed quantitative results on Tanks & Temples and ETH3D, please check the leaderboards ([Tanks & Temples: trained on DTU](https://www.tanksandtemples.org/details/2566/), [Tanks & Temples: trained on BlendedMVS](https://www.tanksandtemples.org/details/2679//), [ETH3D: trained on DTU](https://www.eth3d.net/result_details?id=368), [ETH3D: trained on BlendedMVS](https://www.eth3d.net/result_details?id=379)).
+* For our detailed quantitative results on ETH3D, please check the leaderboards ([ETH3D: trained on DTU](https://www.eth3d.net/result_details?id=368), [ETH3D: trained on BlendedMVS](https://www.eth3d.net/result_details?id=379)).
 
 ## Training
 ### DTU
