@@ -97,12 +97,8 @@ def read_cameras_binary(path_to_model_file):
             camera_properties = read_next_bytes(
                 fid, num_bytes=24, format_char_sequence="iiQQ")
             camera_id = camera_properties[0]
-            # print("camera id")
-            # print(camera_id)
 
             model_id = camera_properties[1]
-            # print("model id")
-            # print(model_id)
             model_name = CAMERA_MODEL_IDS[camera_properties[1]].model_name
             width = camera_properties[2]
             height = camera_properties[3]
@@ -158,19 +154,13 @@ def read_images_binary(path_to_model_file):
     images = {}
     with open(path_to_model_file, "rb") as fid:
         num_reg_images = read_next_bytes(fid, 8, "Q")[0]
-        # print("img num")
-        # print(num_reg_images)
         for image_index in range(num_reg_images):
             binary_image_properties = read_next_bytes(
                 fid, num_bytes=64, format_char_sequence="idddddddi")
             image_id = binary_image_properties[0]
-            # print("image_id")
-            # print(image_id)
             qvec = np.array(binary_image_properties[1:5])
             tvec = np.array(binary_image_properties[5:8])
             camera_id = binary_image_properties[8]
-            # print("image_id_camera")
-            # print(camera_id)
             image_name = ""
             current_char = read_next_bytes(fid, 1, "c")[0]
             while current_char != b"\x00":   # look for the ASCII 0 entry
@@ -183,8 +173,7 @@ def read_images_binary(path_to_model_file):
             xys = np.column_stack([tuple(map(float, x_y_id_s[0::3])),
                                    tuple(map(float, x_y_id_s[1::3]))])
             point3D_ids = np.array(tuple(map(int, x_y_id_s[2::3])))
-            # print("point_3d")
-            # print(point3D_ids)
+
             images[image_id] = Image(
                 id=image_id, qvec=qvec, tvec=tvec,
                 camera_id=camera_id, name=image_name,
@@ -228,8 +217,6 @@ def read_points3d_binary(path_to_model_file):
     points3D = {}
     with open(path_to_model_file, "rb") as fid:
         num_points = read_next_bytes(fid, 8, "Q")[0]
-        # print("num points")
-        # print(num_points)
         for point_line_index in range(num_points):
             binary_point_line_properties = read_next_bytes(
                 fid, num_bytes=43, format_char_sequence="QdddBBBd")
@@ -307,13 +294,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     image_dir = os.path.join(args.folder, 'images')
-    # model_dir = os.path.join(args.folder, 'sparse')
-    model_dir = os.path.join(args.folder, 'dslr_calibration_undistorted')
-    cam_dir = os.path.join(args.folder, 'cams_shorten')
+    model_dir = os.path.join(args.folder, 'sparse')
+    # model_dir = os.path.join(args.folder, 'dslr_calibration_undistorted')
+    cam_dir = os.path.join(args.folder, 'cams_1')
     renamed_dir = os.path.join(args.folder, 'images')
     # the colmap results may be stored in '.bin' or '.txt' format
-    cameras, images, points3d = read_model(model_dir, '.txt')
-    # cameras, images, points3d = read_model(model_dir, '.bin')
+    # cameras, images, points3d = read_model(model_dir, '.txt')
+    cameras, images, points3d = read_model(model_dir, '.bin')
 
     num_images = len(list(images.items()))
 

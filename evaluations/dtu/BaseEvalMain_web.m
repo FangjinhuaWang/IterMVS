@@ -5,11 +5,12 @@ clc
 
 % script to calculate distances have been measured for all included scans (UsedSets)
 
-dataPath='/local/home/fawang/Desktop/SampleSet/MVS Data/';
-plyPath='/local/home/fawang/Desktop/mvs/mvs_205/outputs/';
-resultsPath='/local/home/fawang/Desktop/mvs/mvs_205/outputs/';
+dataPath='/home/Desktop/SampleSet/MVS Data/';
+plyPath='/home/Desktop/IterVMS/outputs/';
+resultsPath='/home/Desktop/IterVMS/outputs/';
 
-method_string='patchmatchnet';
+
+method_string='itermvs';
 light_string='l3'; % l3 is the setting with all lights on, l7 is randomly sampled between the 7 settings (index 0-6)
 representation_string='Points'; %mvs representation 'Points' or 'Surfaces'
 
@@ -49,10 +50,10 @@ for cIdx=1:length(UsedSets)
         
         BaseEval=PointCompareMain(cSet,Qdata,dst,dataPath);
         
-%         disp('Saving results'), drawnow
-%         toc
-%         save(EvalName,'BaseEval');
-%         toc
+        disp('Saving results'), drawnow
+        toc
+        save(EvalName,'BaseEval');
+        toc
         
         % write obj-file of evaluation
 %         BaseEval2Obj_web(BaseEval,method_string, resultsPath)

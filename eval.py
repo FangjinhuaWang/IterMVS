@@ -6,7 +6,6 @@ import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torch.autograd import Variable
 import torch.nn.functional as F
 import numpy as np
 import time
@@ -18,31 +17,24 @@ from datasets.data_io import read_pfm, save_pfm
 import cv2
 from plyfile import PlyData, PlyElement
 from PIL import Image
-import nvgpu
 
 cudnn.benchmark = True
 
 parser = argparse.ArgumentParser(description='Predict depth, filter, and fuse')
 parser.add_argument('--model', default='IterMVS', help='select model')
-
 parser.add_argument('--dataset', default='dtu_yao_eval', help='select dataset')
 parser.add_argument('--testpath', help='testing data path')
 parser.add_argument('--testlist', help='testing scan list')
 parser.add_argument('--split', default='intermediate', help='select data')
-
 parser.add_argument('--batch_size', type=int, default=1, help='testing batch size')
 parser.add_argument('--n_views', type=int, default=5, help='num of view')
-
-
 parser.add_argument('--loadckpt', default=None, help='load a specific checkpoint')
 parser.add_argument('--outdir', default='./outputs', help='output dir')
 parser.add_argument('--display', action='store_true', help='display depth images and masks')
-
-parser.add_argument('--iteration', type=int, default=5, help='num of iteration of GRU')
-
+parser.add_argument('--iteration', type=int, default=4, help='num of iteration of GRU')
 parser.add_argument('--geo_pixel_thres', type=float, default=1, help='pixel threshold for geometric consistency filtering')
 parser.add_argument('--geo_depth_thres', type=float, default=0.01, help='depth threshold for geometric consistency filtering')
-parser.add_argument('--photo_thres', type=float, default=0.5, help='threshold for photometric consistency filtering')
+parser.add_argument('--photo_thres', type=float, default=0.3, help='threshold for photometric consistency filtering')
 
 # parse arguments and check
 args = parser.parse_args()
@@ -51,11 +43,9 @@ print_args(args)
 
 if args.dataset=="dtu_yao_eval":
     img_wh=(1600, 1152)
-    # img_wh=(640,512)
 elif args.dataset=="tanks":
     img_wh=(1920, 1024)
 elif args.dataset=="eth3d":
-    # img_wh = (2688,1792)
     img_wh = (1920,1280)
 
 # read intrinsics and extrinsics
@@ -78,7 +68,6 @@ def read_img(filename, img_wh):
     np_img = np.array(img, dtype=np.float32) / 255.
     original_h, original_w, _ = np_img.shape
     np_img = cv2.resize(np_img, img_wh, interpolation=cv2.INTER_LINEAR)
-    # np_img = cv2.resize(np_img, (img_wh[0]//4, img_wh[1]//4), interpolation=cv2.INTER_LINEAR)
     return np_img, original_h, original_w
 
 
@@ -120,7 +109,7 @@ def save_depth():
     TestImgLoader = DataLoader(test_dataset, args.batch_size, shuffle=False, num_workers=4, drop_last=False)
 
     # model
-    model = Pipeline(iteration=args.iteration, height0=img_wh[1], width0=img_wh[0], test=True)
+    model = Pipeline(iteration=args.iteration, test=True)
     model = nn.DataParallel(model)
     model.cuda()
 
@@ -134,21 +123,16 @@ def save_depth():
         for batch_idx, sample in enumerate(TestImgLoader):
             start_time = time.time()
             sample_cuda = tocuda(sample)
-            outputs = model(sample_cuda["imgs"], sample_cuda["proj_matrices"], sample_cuda["relative_extrinsic"], sample_cuda["intrinsics_inv"],
+            outputs = model(sample_cuda["imgs"], sample_cuda["proj_matrices"],
                         sample_cuda["depth_min"], sample_cuda["depth_max"])
-            # print(nvgpu.gpu_info())
-            # print(torch.cuda.is_available())
-            # print(len(outputs["confidences_upsampled"]))
+
             outputs = tensor2numpy(outputs)
             del sample_cuda
             print('Iter {}/{}, time = {:.3f}'.format(batch_idx, len(TestImgLoader), time.time() - start_time))
             filenames = sample["filename"]
 
-            
-            
             # save depth maps and confidence maps
             for filename, depth_est, confidence in zip(filenames, outputs["depths_upsampled"], outputs["confidence_upsampled"]):
-            # for filename, depth_est, confidence in zip(filenames, outputs["depths"], outputs["confidences"]):
                 depth_filename = os.path.join(args.outdir, filename.format('depth_est', '.pfm'))
                 confidence_filename = os.path.join(args.outdir, filename.format('confidence', '.pfm'))
                 os.makedirs(depth_filename.rsplit('/', 1)[0], exist_ok=True)
@@ -159,8 +143,6 @@ def save_depth():
                 # save confidence maps
                 confidence = np.squeeze(confidence, 0)
                 save_pfm(confidence_filename, confidence)
-                
-
 
 # project the reference point cloud into the source view, then project back
 def reproject_with_depth(depth_ref, intrinsics_ref, extrinsics_ref, depth_src, intrinsics_src, extrinsics_src):
@@ -209,13 +191,9 @@ def check_geometric_consistency(depth_ref, intrinsics_ref, extrinsics_ref, depth
     x_ref, y_ref = np.meshgrid(np.arange(0, width), np.arange(0, height))
     depth_reprojected, x2d_reprojected, y2d_reprojected, x2d_src, y2d_src = reproject_with_depth(depth_ref, intrinsics_ref, extrinsics_ref,
                                                      depth_src, intrinsics_src, extrinsics_src)
-    # print(depth_ref.shape)
-    # print(depth_reprojected.shape)
-    # check |p_reproj-p_1| < 1
+
     dist = np.sqrt((x2d_reprojected - x_ref) ** 2 + (y2d_reprojected - y_ref) ** 2)
 
-    # check |d_reproj-d_1| / d_1 < 0.01
-    # depth_ref = np.squeeze(depth_ref, 2)
     depth_diff = np.abs(depth_reprojected - depth_ref)
     relative_depth_diff = depth_diff / depth_ref
 
@@ -234,38 +212,27 @@ def filter_depth(scan_folder, out_folder, plyfilename, geo_pixel_thres, geo_dept
 
     pair_data = read_pair_file(pair_file)
     nviews = len(pair_data)
-    
 
     # for each reference view and the corresponding source views
     for ref_view, src_views in pair_data:
         # load the camera parameters
         ref_intrinsics, ref_extrinsics = read_camera_parameters(
             os.path.join(scan_folder, 'cams_1/{:0>8}_cam.txt'.format(ref_view)))
-        # ref_intrinsics[0] *= 0.25*img_wh[0]/original_w
-        # ref_intrinsics[1] *= 0.25*img_wh[1]/original_h
-        # load the reference image
         ref_img, original_h, original_w = read_img(os.path.join(scan_folder, 'images/{:0>8}.jpg'.format(ref_view)), img_wh)
         ref_intrinsics[0] *= img_wh[0]/original_w
         ref_intrinsics[1] *= img_wh[1]/original_h
         # load the estimated depth of the reference view
         ref_depth_est = read_pfm(os.path.join(out_folder, 'depth_est/{:0>8}.pfm'.format(ref_view)))[0]
         ref_depth_est = np.squeeze(ref_depth_est, 2)
-        # load the photometric mask of the reference view
+        # load the photometric confidence of the reference view
         confidence = read_pfm(os.path.join(out_folder, 'confidence/{:0>8}.pfm'.format(ref_view)))[0]
-        # print(np.max(confidence))
-        # print(confidence)
         confidence = np.squeeze(confidence, 2)
         photo_mask = confidence > photo_thres 
 
         all_srcview_depth_ests = []
-        
-
         # compute the geometric mask
         geo_mask_sum = 0
 
-        # if args.dataset=="eth3d":
-        #     src_views = [i for i in range(nviews) if i!=ref_view]
-        
         for src_view in src_views:
             # camera parameters of the source view
             src_intrinsics, src_extrinsics = read_camera_parameters(
@@ -273,65 +240,53 @@ def filter_depth(scan_folder, out_folder, plyfilename, geo_pixel_thres, geo_dept
             _, original_h, original_w = read_img(os.path.join(scan_folder, 'images/{:0>8}.jpg'.format(src_view)), img_wh)
             src_intrinsics[0] *= img_wh[0]/original_w
             src_intrinsics[1] *= img_wh[1]/original_h
-            # src_intrinsics[0] *= 0.25*img_wh[0]/original_w
-            # src_intrinsics[1] *= 0.25*img_wh[1]/original_h
+
             # the estimated depth of the source view
             src_depth_est = read_pfm(os.path.join(out_folder, 'depth_est/{:0>8}.pfm'.format(src_view)))[0]
             
 
-            geo_mask, depth_reprojected, x2d_src, y2d_src = check_geometric_consistency(ref_depth_est, ref_intrinsics, ref_extrinsics,
+            geo_mask, depth_reprojected, _, _ = check_geometric_consistency(ref_depth_est, ref_intrinsics, ref_extrinsics,
                                                                       src_depth_est,
                                                                       src_intrinsics, src_extrinsics,
                                                                       geo_pixel_thres, geo_depth_thres)
             geo_mask_sum += geo_mask.astype(np.int32)
             all_srcview_depth_ests.append(depth_reprojected)
-            
 
         depth_est_averaged = (sum(all_srcview_depth_ests) + ref_depth_est) / (geo_mask_sum + 1)
-        # at least 3 source views matched
-        # large threshold, high accuracy, low completeness
         geo_mask = geo_mask_sum >= geo_mask_thres
         final_mask = np.logical_and(photo_mask, geo_mask)
-        # final_mask = geo_mask
-        
-
-        
 
         os.makedirs(os.path.join(out_folder, "mask"), exist_ok=True)
         save_mask(os.path.join(out_folder, "mask/{:0>8}_photo.png".format(ref_view)), photo_mask)
         save_mask(os.path.join(out_folder, "mask/{:0>8}_geo.png".format(ref_view)), geo_mask)
         save_mask(os.path.join(out_folder, "mask/{:0>8}_final.png".format(ref_view)), final_mask)
-        os.makedirs(os.path.join(out_folder, "depth_img"), exist_ok=True)
-
 
         print("processing {}, ref-view{:0>2}, geo_mask:{:3f} photo_mask:{:3f} final_mask: {:3f}".format(scan_folder, ref_view,
                                                                 geo_mask.mean(), photo_mask.mean(), final_mask.mean()))
 
         if args.display:
-            # import cv2
-            # cv2.imshow('ref_img', ref_img[:, :, ::-1])
+            cv2.imshow('ref_img', ref_img[:, :, ::-1])
             cv2.imshow('ref_depth', ref_depth_est / np.max(ref_depth_est))
-            # cv2.imshow('ref_depth * photo_mask', ref_depth_est * photo_mask.astype(np.float32) / 800)
-            # cv2.imshow('ref_depth * geo_mask', ref_depth_est * geo_mask.astype(np.float32) / 800)
-            # cv2.imshow('ref_depth * mask', ref_depth_est * final_mask.astype(np.float32) / 800)
-            cv2.waitKey(1)
+            cv2.imshow('ref_depth * photo_mask', ref_depth_est * photo_mask.astype(np.float32) / np.max(ref_depth_est))
+            cv2.imshow('ref_depth * geo_mask', ref_depth_est * geo_mask.astype(np.float32) / np.max(ref_depth_est))
+            cv2.imshow('ref_depth * mask', ref_depth_est * final_mask.astype(np.float32) / np.max(ref_depth_est))
+            cv2.waitKey(0)
 
         height, width = depth_est_averaged.shape[:2]
         x, y = np.meshgrid(np.arange(0, width), np.arange(0, height))
-        
+
         valid_points = final_mask
         # print("valid_points", valid_points.mean())
         x, y, depth = x[valid_points], y[valid_points], depth_est_averaged[valid_points]
         
         color = ref_img[valid_points]
-        xyz_ref = np.matmul(    np.linalg.inv(ref_intrinsics),
+        xyz_ref = np.matmul(np.linalg.inv(ref_intrinsics),
                             np.vstack((x, y, np.ones_like(x))) * depth)
         xyz_world = np.matmul(np.linalg.inv(ref_extrinsics),
                               np.vstack((xyz_ref, np.ones_like(x))))[:3]
         vertexs.append(xyz_world.transpose((1, 0)))
         vertex_colors.append((color * 255).astype(np.uint8))
 
-        
     vertexs = np.concatenate(vertexs, axis=0)
     vertex_colors = np.concatenate(vertex_colors, axis=0)
     vertexs = np.array([tuple(v) for v in vertexs], dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')])
@@ -349,28 +304,23 @@ def filter_depth(scan_folder, out_folder, plyfilename, geo_pixel_thres, geo_dept
 
 
 if __name__ == '__main__':
-    # step1. save all the depth maps and the masks in outputs directory
     save_depth()
-    # img_wh=(1600, 1200)
     if args.dataset=="dtu_yao_eval":
         with open(args.testlist) as f:
             scans = f.readlines()
             scans = [line.rstrip() for line in scans]
-            
-            
+
         for scan in scans:
             scan_id = int(scan[4:])
             scan_folder = os.path.join(args.testpath, scan)
             out_folder = os.path.join(args.outdir, scan)
-            # step2. filter saved depth maps with geometric constraints
-            filter_depth(scan_folder, out_folder, os.path.join(args.outdir, 'patchmatchnet{:0>3}_l3.ply'.format(scan_id)), 
+            filter_depth(scan_folder, out_folder, os.path.join(args.outdir, 'itermvs{:0>3}_l3.ply'.format(scan_id)), 
                         args.geo_pixel_thres, args.geo_depth_thres, args.photo_thres, img_wh, 4)
     elif args.dataset=="tanks":
+        # intermediate dataset
         if args.split == "intermediate":
-
             scans = ['Family', 'Francis', 'Horse', 'Lighthouse',
                     'M60', 'Panther', 'Playground', 'Train']
-            # geo_mask_thres = 4
             geo_mask_thres = {'Family': 5,
                                 'Francis': 6,
                                 'Horse': 5,
@@ -379,38 +329,18 @@ if __name__ == '__main__':
                                 'Panther': 5,
                                 'Playground': 5,
                                 'Train': 5}
-            # photo_thres = {'Family': 0.8,
-            #                     'Francis': 0.8,
-            #                     'Horse': 0.6,
-            #                     'Lighthouse': 0.8,
-            #                     'M60': 0.8,
-            #                     'Panther': 0.8,
-            #                     'Playground': 0.8,
-            #                     'Train': 0.8}
-            # photo_thres = {'Family': 0.9,
-            #                     'Francis': 0.9,
-            #                     'Horse': 0.9,
-            #                     'Lighthouse': 0.9,
-            #                     'M60': 0.9,
-            #                     'Panther': 0.9,
-            #                     'Playground': 0.9,
-            #                     'Train': 0.9}
+
             for scan in scans:
-                
                 scan_folder = os.path.join(args.testpath, args.split, scan)
                 out_folder = os.path.join(args.outdir, scan)
-                # step2. filter saved depth maps with geometric constraints
-                
-                # filter_depth(scan_folder, out_folder, os.path.join(args.outdir, scan + '.ply'), 
-                #     args.geo_pixel_thres, args.geo_depth_thres, photo_thres[scan], img_wh, image_sizes[scan], geo_mask_thres[scan]) 
+
                 filter_depth(scan_folder, out_folder, os.path.join(args.outdir, scan + '.ply'), 
                     args.geo_pixel_thres, args.geo_depth_thres, args.photo_thres, img_wh, geo_mask_thres[scan])
+
         # advanced dataset
         elif args.split == "advanced":
-
             scans = ['Auditorium', 'Ballroom', 'Courtroom',
                     'Museum', 'Palace', 'Temple']
-            # geo_mask_thres = 4
             geo_mask_thres = {'Auditorium': 3,
                                 'Ballroom': 4,
                                 'Courtroom': 4,
@@ -418,26 +348,17 @@ if __name__ == '__main__':
                                 'Palace': 5,
                                 'Temple': 4}
 
-            # photo_thres = {'Auditorium': 0.9,
-            #                     'Ballroom': 0.9,
-            #                     'Courtroom': 0.9,
-            #                     'Museum': 0.9,
-            #                     'Palace': 0.9,
-            #                     'Temple': 0.9}
             for scan in scans:
-                
                 scan_folder = os.path.join(args.testpath, args.split, scan)
                 out_folder = os.path.join(args.outdir, scan)
-                # step2. filter saved depth maps with geometric constraints
                 filter_depth(scan_folder, out_folder, os.path.join(args.outdir, scan + '.ply'), 
                     args.geo_pixel_thres, args.geo_depth_thres, args.photo_thres, img_wh, geo_mask_thres[scan])
+
     elif args.dataset=="eth3d":
         if args.split == "test":
             scans = ['botanical_garden', 'boulders', 'bridge', 'door',
                     'exhibition_hall', 'lecture_room', 'living_room', 'lounge',
                     'observatory', 'old_computer', 'statue', 'terrace_2']
-            
-            # geo_mask_thres = 2
             
             geo_mask_thres = {'botanical_garden':1,  # 30 images, outdoor
                     'boulders':1, # 26 images, outdoor
@@ -469,7 +390,6 @@ if __name__ == '__main__':
                 start_time = time.time()
                 scan_folder = os.path.join(args.testpath, scan)
                 out_folder = os.path.join(args.outdir, scan)
-                # step2. filter saved depth maps with geometric constraints
                 filter_depth(scan_folder, out_folder, os.path.join(args.outdir, scan + '.ply'), 
                             args.geo_pixel_thres, args.geo_depth_thres, args.photo_thres, img_wh, geo_mask_thres[scan]) 
                 print('scan: '+scan+' time = {:3f}'.format(time.time() - start_time))
@@ -478,8 +398,7 @@ if __name__ == '__main__':
             scans = ['courtyard', 'delivery_area', 'electro', 'facade',
                     'kicker', 'meadow', 'office', 'pipes', 'playground',
                     'relief', 'relief_2', 'terrace', 'terrains']
-            
-            # geo_mask_thres = 2
+
             geo_mask_thres = {'courtyard':1,  # 38 images, outdoor
                     'delivery_area':2, # 44 images, indoor
                     'electro':1,  # 45 images, outdoor
@@ -494,7 +413,7 @@ if __name__ == '__main__':
                     'terrace':1,  # 23 images, outdoor
                     'terrains':2 # 42 images, indoor
                     }
-            
+
             num_images = {'courtyard':38,  # 38 images, outdoor
                     'delivery_area':44, # 44 images, indoor
                     'electro':45,  # 45 images, outdoor
@@ -513,7 +432,6 @@ if __name__ == '__main__':
                 start_time = time.time()
                 scan_folder = os.path.join(args.testpath, scan)
                 out_folder = os.path.join(args.outdir, scan)
-                # step2. filter saved depth maps with geometric constraints
                 filter_depth(scan_folder, out_folder, os.path.join(args.outdir, scan + '.ply'), 
                             args.geo_pixel_thres, args.geo_depth_thres, args.photo_thres, img_wh, geo_mask_thres[scan])   
                 print('scan: '+scan+' time = {:3f}'.format(time.time() - start_time))

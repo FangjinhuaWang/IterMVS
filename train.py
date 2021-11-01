@@ -34,12 +34,12 @@ parser.add_argument('--vallist', help='validation list')
 
 parser.add_argument('--epochs', type=int, default=16, help='number of epochs to train')
 parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
-parser.add_argument('--lrepochs', type=str, default="4:10", help='epoch ids to downscale lr and the downscale rate')
+parser.add_argument('--lrepochs', type=str, default="4,8,12:2", help='epoch ids to downscale lr and the downscale rate')
 parser.add_argument('--wd', type=float, default=0.0, help='weight decay')
 
-parser.add_argument('--batch_size', type=int, default=12, help='train batch size')
+parser.add_argument('--batch_size', type=int, default=4, help='train batch size')
 parser.add_argument('--loadckpt', default=None, help='load a specific checkpoint')
-parser.add_argument('--logdir', default='./checkpoints/debug', help='the directory to save checkpoints/logs')
+parser.add_argument('--logdir', default='./checkpoints', help='the directory to save checkpoints/logs')
 parser.add_argument('--resume', action='store_true', help='continue to train the model')
 parser.add_argument('--regress', action='store_true', help='train the regression and confidence')
 parser.add_argument('--small_image', action='store_true', help='train with small input as 640x512, otherwise train with 1280x1024')
@@ -49,7 +49,7 @@ parser.add_argument('--save_freq', type=int, default=1, help='save checkpoint fr
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed')
 
 
-parser.add_argument('--iteration', type=int, default=5, help='num of iteration of GRU')
+parser.add_argument('--iteration', type=int, default=4, help='num of iteration of GRU')
 
 
 
@@ -83,18 +83,16 @@ print_args(args)
 # dataset, dataloader
 MVSDataset = find_dataset_def(args.dataset)
 
-train_dataset = MVSDataset(args.trainpath, args.trainlist, "train", 5, robust_train=True, small_image=args.small_image)
-test_dataset = MVSDataset(args.valpath, args.vallist, "val", 5,  robust_train=False, small_image=args.small_image)
+train_dataset = MVSDataset(args.trainpath, args.trainlist, "train", 5, robust_train=True)
+test_dataset = MVSDataset(args.valpath, args.vallist, "val", 5,  robust_train=False)
 
 TrainImgLoader = DataLoader(train_dataset, args.batch_size, shuffle=True, num_workers=4, drop_last=True)
 TestImgLoader = DataLoader(test_dataset, args.batch_size, shuffle=False, num_workers=4, drop_last=False)
 
 # model, optimizer
 model = Pipeline(iteration=args.iteration)
-# model = model.cuda()
 if args.mode in ["train", "val"]:
     model = nn.DataParallel(model)
-    
 model.cuda()
 model_loss = full_loss
 optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, betas=(0.9, 0.999), weight_decay=args.wd)
@@ -127,16 +125,9 @@ def train():
     lr_gamma = 1 / float(args.lrepochs.split(':')[1])
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones, gamma=lr_gamma,
                                                         last_epoch=start_epoch - 1)
-    # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=32, last_epoch=start_epoch - 1)
     for epoch_idx in range(start_epoch, args.epochs):
         print('Epoch {}:'.format(epoch_idx))
-        # lr_scheduler.step()
         global_step = len(TrainImgLoader) * epoch_idx
-        # torch.save({
-        #         'epoch': epoch_idx,
-        #         'model': model.state_dict(),
-        #         'optimizer': optimizer.state_dict()},
-        #         "{}/model_{:0>6}.ckpt".format(args.logdir, epoch_idx))
 
         # training
         for batch_idx, sample in enumerate(TrainImgLoader):
@@ -155,9 +146,8 @@ def train():
                 'Epoch {}/{}, Iter {}/{}, train loss = {:.3f}, time = {:.3f}'.format(epoch_idx, args.epochs, batch_idx,
                                                                                      len(TrainImgLoader), loss,
                                                                                      time.time() - start_time))
-        
         lr_scheduler.step()
-        
+
         # checkpoint
         if (epoch_idx + 1) % args.save_freq == 0:
             torch.save({
@@ -172,9 +162,7 @@ def train():
             start_time = time.time()
             global_step = len(TrainImgLoader) * epoch_idx + batch_idx
             do_summary = global_step % args.summary_freq == 0
-            # do_summary_test = global_step % (10*args.summary_freq) == 0
             do_summary_image = global_step % (50*args.summary_freq) == 0
-            
             loss, scalar_outputs, image_outputs = test_sample(sample, detailed_summary=do_summary)
             if do_summary:
                 save_scalars(logger, 'test', scalar_outputs, global_step)
@@ -187,7 +175,6 @@ def train():
                                                                                      time.time() - start_time))
         save_scalars(logger, 'fulltest', avg_test_scalars.mean(), global_step)
         print("avg_test_scalars:", avg_test_scalars.mean())
-        # gc.collect()
 
 
 def test():
@@ -207,61 +194,37 @@ def test():
 def train_sample(sample, detailed_summary=False):
     model.train()
     optimizer.zero_grad()
-    # print("lr{:3f}".format(optimizer.state_dict()['param_groups'][0]['lr']))
-    # torch.autograd.set_detect_anomaly(True)
     sample_cuda = tocuda(sample)
     depth_gt = sample_cuda["depth"] 
-    # normal_gt = sample_cuda["normal"]
-    # view_weights_gt = sample_cuda["view_weigzhts"]
     mask = sample_cuda["mask"]      
-  
-    depth_gt_0 = depth_gt['stage_0']
-    mask_0 = mask['stage_0']
-    depth_gt_1 = depth_gt['stage_2']
-    mask_1 = mask['stage_2']
-    # normal_gt_1 = normal_gt['stage_2']
+    depth_gt_0 = depth_gt['level_0']
+    mask_0 = mask['level_0']
+    depth_gt_1 = depth_gt['level_2']
+    mask_1 = mask['level_2']
 
-    outputs = model(sample_cuda["imgs"], sample_cuda["proj_matrices"], sample_cuda["relative_extrinsic"], sample_cuda["intrinsics_inv"],
+    outputs = model(sample_cuda["imgs"], sample_cuda["proj_matrices"],
                     sample_cuda["depth_min"], sample_cuda["depth_max"])
 
     depth_est = outputs["depths"]
     confidences_est = outputs["confidences"]
     depth_upsampled_est = outputs["depths_upsampled"]
-    # confidence_upsampled_est = outputs["confidence_upsampled"]
-    # view_weights_est = outputs["view_weights"]
-    # normals_est = outputs["normals"]
-    # with torch.autograd.set_detect_anomaly(True):
-    loss = model_loss(depth_est, depth_upsampled_est, confidences_est, depth_gt, mask, sample_cuda["depth_min"], sample_cuda["depth_max"], sample_cuda["imgs"], sample_cuda["proj_matrices"], args.regress)
+    loss = model_loss(depth_est, depth_upsampled_est, confidences_est, depth_gt, mask, sample_cuda["depth_min"], sample_cuda["depth_max"], args.regress)
     loss.backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), 2.0)
     optimizer.step()
-    
     scalar_outputs = {"loss": loss}
     image_outputs = {
                         "depth_gt": depth_gt_1 * mask_1,
                         "depth_initial": depth_est["combine"][0] * mask_1,
-
-                        # "normal_gt": normal_gt_1 * mask_1,
-                        # "normal_first": normals_est[0] * mask_1,
-                        # "normal_final": normals_est[-1] * mask_1,
-                        "ref_img": sample["imgs"]['stage_2'][:, 0],
+                        "ref_img": sample["imgs"]['level_2'][:, 0],
+                        "depth_final_full": depth_upsampled_est[-1] * mask_0
                         }
-    # if not args.train_stage=="initial":
-    # image_outputs["depth_final"]=depth_est[-1] * mask_1
-    image_outputs["depth_final_full"]=depth_upsampled_est[-1] * mask_0
-    
     if detailed_summary:
         image_outputs["errormap_initial"] = (depth_est["combine"][0] - depth_gt_1).abs() * mask_1
         image_outputs["errormap_final_full"] = (depth_upsampled_est[-1] - depth_gt_0).abs() * mask_0
-        
 
     scalar_outputs["abs_error_initial"] = AbsDepthError_metrics(depth_est["combine"][0], depth_gt_1, mask_1 > 0.5)
     scalar_outputs["thres1mm_initial"] = Thres_metrics(depth_est["combine"][0], depth_gt_1, mask_1 > 0.5, 1)
-    # scalar_outputs["thres2mm_initial"] = Thres_metrics(depth_est[0], depth_gt_1, mask_1 > 0.5, 2)
-    # scalar_outputs["thres4mm_initial"] = Thres_metrics(depth_est[0], depth_gt_1, mask_1 > 0.5, 4)
-    # scalar_outputs["thres8mm_initial"] = Thres_metrics(depth_est[0], depth_gt_1, mask_1 > 0.5, 8)
-
-    # if not args.train_stage=="initial":
     scalar_outputs["abs_error_final_full"] = AbsDepthError_metrics(depth_upsampled_est[-1], depth_gt_0, mask_0 > 0.5)
     # threshold = 1mm
     scalar_outputs["thres1mm_final_full"] = Thres_metrics(depth_upsampled_est[-1], depth_gt_0, mask_0 > 0.5, 1)
@@ -271,7 +234,7 @@ def train_sample(sample, detailed_summary=False):
     scalar_outputs["thres4mm_final_full"] = Thres_metrics(depth_upsampled_est[-1], depth_gt_0, mask_0 > 0.5, 4)
     # threshold = 8mm
     scalar_outputs["thres8mm_final_full"] = Thres_metrics(depth_upsampled_est[-1], depth_gt_0, mask_0 > 0.5, 8)
-    
+
     iters = args.iteration+1
     for j in range(1, iters):
         scalar_outputs[f"thres1mm_gru_{j}"] = Thres_metrics(depth_est["combine"][j], depth_gt_1, mask_1 > 0.5, 1)
@@ -285,41 +248,27 @@ def test_sample(sample, detailed_summary=True):
     model.eval()
     sample_cuda = tocuda(sample)
     depth_gt = sample_cuda["depth"] 
-    # normal_gt = sample_cuda["normal"]
-    # view_weights_gt = sample_cuda["view_weights"]
     mask = sample_cuda["mask"]      
-    
-  
-    depth_gt_0 = depth_gt['stage_0']
-    mask_0 = mask['stage_0']
-    depth_gt_1 = depth_gt['stage_2']
-    mask_1 = mask['stage_2']
-    # normal_gt_1 = normal_gt['stage_2']
+    depth_gt_0 = depth_gt['level_0']
+    mask_0 = mask['level_0']
+    depth_gt_1 = depth_gt['level_2']
+    mask_1 = mask['level_2']
 
-    outputs = model(sample_cuda["imgs"], sample_cuda["proj_matrices"], sample_cuda["relative_extrinsic"], sample_cuda["intrinsics_inv"],
+    outputs = model(sample_cuda["imgs"], sample_cuda["proj_matrices"],
                     sample_cuda["depth_min"], sample_cuda["depth_max"])
 
     depth_est = outputs["depths"]
     confidences_est = outputs["confidences"]
     depth_upsampled_est = outputs["depths_upsampled"]
-    # confidence_upsampled_est = outputs["confidence_upsampled"]
-    # view_weights_est = outputs["view_weights"]
-    # normals_est = outputs["normals"]
-    loss = model_loss(depth_est, depth_upsampled_est, confidences_est, depth_gt, mask, sample_cuda["depth_min"], sample_cuda["depth_max"], sample_cuda["imgs"], sample_cuda["proj_matrices"], args.regress)
+    loss = model_loss(depth_est, depth_upsampled_est, confidences_est, depth_gt, mask, sample_cuda["depth_min"], sample_cuda["depth_max"], args.regress)
     scalar_outputs = {"loss": loss}
     image_outputs = {
                     "depth_gt": depth_gt_1 * mask_1,
                     "depth_initial": depth_est["combine"][0] * mask_1,
-
-                    # "normal_gt": normal_gt_1 * mask_1,
-                    # "normal_first": normals_est[0] * mask_1,
-                    # "normal_final": normals_est[-1] * mask_1,
-                    "ref_img": sample["imgs"]['stage_2'][:, 0],
+                    "ref_img": sample["imgs"]['level_2'][:, 0],
+                    "depth_final_full": depth_upsampled_est[-1] * mask_0
                     }
-    # if not args.train_stage=="initial":
-    # image_outputs["depth_final"]=depth_est[-1] * mask_1
-    image_outputs["depth_final_full"]=depth_upsampled_est[-1] * mask_0
-    
+
     if detailed_summary:
         image_outputs["errormap_initial"] = (depth_est["combine"][0] - depth_gt_1).abs() * mask_1
         image_outputs["errormap_final_full"] = (depth_upsampled_est[-1] - depth_gt_0).abs() * mask_0
@@ -327,11 +276,6 @@ def test_sample(sample, detailed_summary=True):
 
     scalar_outputs["abs_error_initial"] = AbsDepthError_metrics(depth_est["combine"][0], depth_gt_1, mask_1 > 0.5)
     scalar_outputs["thres1mm_initial"] = Thres_metrics(depth_est["combine"][0], depth_gt_1, mask_1 > 0.5, 1)
-    # scalar_outputs["thres2mm_initial"] = Thres_metrics(depth_est[0], depth_gt_1, mask_1 > 0.5, 2)
-    # scalar_outputs["thres4mm_initial"] = Thres_metrics(depth_est[0], depth_gt_1, mask_1 > 0.5, 4)
-    # scalar_outputs["thres8mm_initial"] = Thres_metrics(depth_est[0], depth_gt_1, mask_1 > 0.5, 8)
-
-    # if not args.train_stage=="initial":
     scalar_outputs["abs_error_final_full"] = AbsDepthError_metrics(depth_upsampled_est[-1], depth_gt_0, mask_0 > 0.5)
     # threshold = 1mm
     scalar_outputs["thres1mm_final_full"] = Thres_metrics(depth_upsampled_est[-1], depth_gt_0, mask_0 > 0.5, 1)
@@ -341,7 +285,7 @@ def test_sample(sample, detailed_summary=True):
     scalar_outputs["thres4mm_final_full"] = Thres_metrics(depth_upsampled_est[-1], depth_gt_0, mask_0 > 0.5, 4)
     # threshold = 8mm
     scalar_outputs["thres8mm_final_full"] = Thres_metrics(depth_upsampled_est[-1], depth_gt_0, mask_0 > 0.5, 8)
-    
+
     iters = args.iteration+1
     for j in range(1, iters):
         scalar_outputs[f"thres1mm_gru_{j}"] = Thres_metrics(depth_est["combine"][j], depth_gt_1, mask_1 > 0.5, 1)
