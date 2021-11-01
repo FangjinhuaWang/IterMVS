@@ -73,6 +73,14 @@ SampleSet
 ```
 In ``evaluations/dtu/BaseEvalMain_web.m``, set `dataPath` as the path to `SampleSet/MVS Data/`, `plyPath` as directory that stores the reconstructed point clouds and `resultsPath` as directory to store the evaluation results. Then run ``evaluations/dtu/BaseEvalMain_web.m`` in matlab.
 
+
+The results look like:
+
+| Acc. (mm) | Comp. (mm) | Overall (mm) |
+|-----------|------------|--------------|
+| 0.373     | 0.354      | 0.363        |
+
+
 ### Evaluation on Tansk & Temples:
 * In ``eval_tanks.sh``, set `TANK_TESTING` as the root directory of the dataset and `--outdir` as the directory to store the reconstructed point clouds. 
 * `CKPT_FILE` is the path of checkpoint file (default as our pretrained model which is trained on DTU, the path is `checkpoints/dtu/model_000015.ckpt`). We also provide our pretrained model trained on BlendedMVS (`checkpoints/blendedmvs/model_000015.ckpt`)
