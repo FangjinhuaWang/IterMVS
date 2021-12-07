@@ -28,6 +28,8 @@ parser.add_argument('--testlist', help='testing scan list')
 parser.add_argument('--split', default='intermediate', help='select data')
 parser.add_argument('--batch_size', type=int, default=1, help='testing batch size')
 parser.add_argument('--n_views', type=int, default=5, help='num of view')
+parser.add_argument('--img_wh', nargs='+', type=int, default=[640, 480],
+        help='height and width of the image')
 parser.add_argument('--loadckpt', default=None, help='load a specific checkpoint')
 parser.add_argument('--outdir', default='./outputs', help='output dir')
 parser.add_argument('--display', action='store_true', help='display depth images and masks')
@@ -47,6 +49,8 @@ elif args.dataset=="tanks":
     img_wh=(1920, 1024)
 elif args.dataset=="eth3d":
     img_wh = (1920,1280)
+else:
+    img_wh = (args.img_wh[0], args.img_wh[1]) # custom dataset
 
 # read intrinsics and extrinsics
 def read_camera_parameters(filename):
@@ -106,6 +110,8 @@ def save_depth():
         test_dataset = MVSDataset(args.testpath, args.n_views, img_wh, args.split)
     elif args.dataset=="eth3d":
         test_dataset = MVSDataset(args.testpath, args.split, args.n_views, img_wh)
+    else:
+        test_dataset = MVSDataset(args.testpath, args.n_views, img_wh)
     TestImgLoader = DataLoader(test_dataset, args.batch_size, shuffle=False, num_workers=4, drop_last=False)
 
     # model
@@ -373,19 +379,6 @@ if __name__ == '__main__':
                     'statue':2,  # 10 images, indoor
                     'terrace_2':2 # 13 images, outdoor
                     }
-            num_images = {'botanical_garden':30,  # 30 images, outdoor
-                    'boulders':26, # 26 images, outdoor
-                    'bridge':110,  # 110 images, outdoor
-                    'door':6, # 6 images, indoor
-                    'exhibition_hall':68,  # 68 images, indoor
-                    'lecture_room':23, # 23 images, indoor
-                    'living_room':65, # 65 images, indoor
-                    'lounge':10,# 10 images, indoor
-                    'observatory':27, # 27 images, outdoor
-                    'old_computer':54, # 54 images, indoor
-                    'statue':10,  # 10 images, indoor
-                    'terrace_2':13 # 13 images, outdoor
-                    }
             for scan in scans:
                 start_time = time.time()
                 scan_folder = os.path.join(args.testpath, scan)
@@ -414,20 +407,6 @@ if __name__ == '__main__':
                     'terrains':2 # 42 images, indoor
                     }
 
-            num_images = {'courtyard':38,  # 38 images, outdoor
-                    'delivery_area':44, # 44 images, indoor
-                    'electro':45,  # 45 images, outdoor
-                    'facade':76, # 76 images, outdoor
-                    'kicker':31,  # 31 images, indoor
-                    'meadow':15, # 15 images, outdoor
-                    'office':26, # 26 images, indoor
-                    'pipes':14,# 14 images, indoor
-                    'playground':38, # 38 images, outdoor
-                    'relief':31, # 31 images, indoor
-                    'relief_2':31, # 31 images, indoor
-                    'terrace':23,  # 23 images, outdoor
-                    'terrains':42 # 42 images, indoor
-                    }
             for scan in scans:
                 start_time = time.time()
                 scan_folder = os.path.join(args.testpath, scan)
@@ -435,3 +414,6 @@ if __name__ == '__main__':
                 filter_depth(scan_folder, out_folder, os.path.join(args.outdir, scan + '.ply'), 
                             args.geo_pixel_thres, args.geo_depth_thres, args.photo_thres, img_wh, geo_mask_thres[scan])   
                 print('scan: '+scan+' time = {:3f}'.format(time.time() - start_time))
+    else:
+        filter_depth(args.testpath, args.outdir, os.path.join(args.outdir, 'custom.ply'), 
+                    args.geo_pixel_thres, args.geo_depth_thres, args.photo_thres, img_wh, geo_mask_thres=3) 

@@ -1,8 +1,12 @@
 # IterMVS
-official source code of paper ''
+official source code of paper 'IterMVS: Iterative Probability Estimation for Efficient Multi-View Stereo'
 
 ## Introduction
- If you find this project useful for your research, please cite: 
+IterMVS is a novel learning-based MVS method combining highest efficiency and competitive reconstruction quality. We propose a novel GRU-based estimator that encodes pixel-wise probability distributions of depth in its hidden state. Ingesting multi-scale matching information, our model refines these distributions over multiple iterations and infers depth and confidence. Extensive experiments on DTU, Tanks & Temples and ETH3D show highest efficiency in both memory and run-time, and a better generalization ability than many state-of-the-art learning-based methods. 
+
+![](imgs/Teaser.jpg)
+
+If you find this project useful for your research, please cite: 
 
 ```
 
@@ -85,14 +89,17 @@ The results look like:
 * In ``eval_tanks.sh``, set `TANK_TESTING` as the root directory of the dataset and `--outdir` as the directory to store the reconstructed point clouds. 
 * `CKPT_FILE` is the path of checkpoint file (default as our pretrained model which is trained on DTU, the path is `checkpoints/dtu/model_000015.ckpt`). We also provide our pretrained model trained on BlendedMVS (`checkpoints/blendedmvs/model_000015.ckpt`)
 * Test on GPU by running `bash eval_tanks.sh`. The code includes depth map estimation and depth fusion. The outputs are the point clouds in `ply` format. 
-* For our detailed quantitative results on Tanks & Temples, please check the leaderboards ([Tanks & Temples: trained on DTU](https://www.tanksandtemples.org/details/2566/), [Tanks & Temples: trained on BlendedMVS](https://www.tanksandtemples.org/details/2679//)).
+* For our detailed quantitative results on Tanks & Temples, please check the leaderboards ([Tanks & Temples: trained on DTU](https://www.tanksandtemples.org/details/2566/), [Tanks & Temples: trained on BlendedMVS](https://www.tanksandtemples.org/details/2679/)).
 
 ### Evaluation on ETH3D:
 * In ``eval_eth.sh``, set `ETH3D_TESTING` as the root directory of the dataset and `--outdir` as the directory to store the reconstructed point clouds. 
 * `CKPT_FILE` is the path of checkpoint file (default as our pretrained model which is trained on DTU, the path is `checkpoints/dtu/model_000015.ckpt`). We also provide our pretrained model trained on BlendedMVS (`checkpoints/blendedmvs/model_000015.ckpt`)
 * Test on GPU by running `bash eval_eth.sh`. The code includes depth map estimation and depth fusion. The outputs are the point clouds in `ply` format. 
-
 * For our detailed quantitative results on ETH3D, please check the leaderboards ([ETH3D: trained on DTU](https://www.eth3d.net/result_details?id=368), [ETH3D: trained on BlendedMVS](https://www.eth3d.net/result_details?id=379)).
+
+### Evaluation on custom dataset:
+* We support preparing the custom dataset from COLMAP's results. The script ``colmap_input.py`` (modified based on the script from [MVSNet](https://github.com/YoYo000/MVSNet)) converts COLMAP's sparse reconstruction results into the same format as the datasets that we provide. 
+* Test on GPU by running `bash eval_custom.sh`.
 
 ## Training
 ### DTU

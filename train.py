@@ -160,7 +160,7 @@ def train():
         avg_test_scalars = DictAverageMeter()
         for batch_idx, sample in enumerate(TestImgLoader):
             start_time = time.time()
-            global_step = len(TrainImgLoader) * epoch_idx + batch_idx
+            global_step = len(TestImgLoader) * epoch_idx + batch_idx
             do_summary = global_step % args.summary_freq == 0
             do_summary_image = global_step % (50*args.summary_freq) == 0
             loss, scalar_outputs, image_outputs = test_sample(sample, detailed_summary=do_summary)
