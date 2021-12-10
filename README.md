@@ -9,7 +9,14 @@ IterMVS is a novel learning-based MVS method combining highest efficiency and co
 If you find this project useful for your research, please cite: 
 
 ```
-
+@misc{wang2021itermvs,
+      title={IterMVS: Iterative Probability Estimation for Efficient Multi-View Stereo}, 
+      author={Fangjinhua Wang and Silvano Galliani and Christoph Vogel and Marc Pollefeys},
+      year={2021},
+      eprint={2112.05126},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
 ```
 
 ## Installation
