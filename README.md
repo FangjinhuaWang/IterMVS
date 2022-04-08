@@ -1,4 +1,4 @@
-# IterMVS
+# IterMVS (CVPR 2022)
 official source code of paper 'IterMVS: Iterative Probability Estimation for Efficient Multi-View Stereo'
 
 ## Introduction
@@ -12,10 +12,8 @@ If you find this project useful for your research, please cite:
 @misc{wang2021itermvs,
       title={IterMVS: Iterative Probability Estimation for Efficient Multi-View Stereo}, 
       author={Fangjinhua Wang and Silvano Galliani and Christoph Vogel and Marc Pollefeys},
-      year={2021},
-      eprint={2112.05126},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV}
+      journal={CVPR},
+      year={2022}
 }
 ```
 
