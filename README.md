@@ -111,7 +111,7 @@ The results look like:
 
 ## Training
 ### DTU
-* Dowload the preprocessed [DTU training data](https://drive.google.com/file/d/1eDjh-_bxKKnEuz5h-HXS7EDJn59clx6V/view), [depths maps](https://virutalbuy-public.oss-cn-hangzhou.aliyuncs.com/share/cascade-stereo/CasMVSNet/dtu_data/dtu_train_hr/Depths_raw.zip), and our [processed camera parameters](https://drive.google.com/file/d/1DAAFXV6bZx0NNWFQMwoSeWMt5mr64myD/view?usp=sharing)(unzip and rename as `Cameras_1`), upzip them and organize them as follows:
+* Dowload the preprocessed [DTU training data](https://drive.google.com/file/d/1eDjh-_bxKKnEuz5h-HXS7EDJn59clx6V/view), [depths maps](https://virutalbuy-public.oss-cn-hangzhou.aliyuncs.com/share/cascade-stereo/CasMVSNet/dtu_data/dtu_train_hr/Depths_raw.zip), and [processed camera parameters](https://drive.google.com/file/d/1VMZSTcXw2m-JEgKj3x3EBbUam2sZknQ9/view?usp=sharing), upzip them and organize them as follows:
 ```
 root_directory
 ├──Cameras_1
