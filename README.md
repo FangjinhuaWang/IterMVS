@@ -1,6 +1,9 @@
 # IterMVS (CVPR 2022)
 official source code of paper 'IterMVS: Iterative Probability Estimation for Efficient Multi-View Stereo'
 
+## Updates
+- 19.09.2025: Introducing a new [MVS pipeline](https://github.com/cvg/diffmvs), which explicitly outperforms IterMVS with higher efficiency. 
+
 ## Introduction
 IterMVS is a novel learning-based MVS method combining highest efficiency and competitive reconstruction quality. We propose a novel GRU-based estimator that encodes pixel-wise probability distributions of depth in its hidden state. Ingesting multi-scale matching information, our model refines these distributions over multiple iterations and infers depth and confidence. Extensive experiments on DTU, Tanks & Temples and ETH3D show highest efficiency in both memory and run-time, and a better generalization ability than many state-of-the-art learning-based methods. 
 
@@ -108,14 +111,13 @@ The results look like:
 
 ## Training
 ### DTU
-* Download pre-processed [DTU's training set](https://polybox.ethz.ch/index.php/s/ugDdJQIuZTk4S35) (provided by PatchmatchNet). The dataset is already organized as follows:
+* Dowload the preprocessed [DTU training data](https://drive.google.com/file/d/1eDjh-_bxKKnEuz5h-HXS7EDJn59clx6V/view), [depths maps](https://virutalbuy-public.oss-cn-hangzhou.aliyuncs.com/share/cascade-stereo/CasMVSNet/dtu_data/dtu_train_hr/Depths_raw.zip), and our [processed camera parameters](https://drive.google.com/file/d/1DAAFXV6bZx0NNWFQMwoSeWMt5mr64myD/view?usp=sharing)(unzip and rename as `Cameras_1`), upzip them and organize them as follows:
 ```
 root_directory
 ├──Cameras_1
 ├──Rectified
 └──Depths_raw
 ```
-* Download our processed camera parameters from [here](https://drive.google.com/file/d/1DAAFXV6bZx0NNWFQMwoSeWMt5mr64myD/view?usp=sharing). Unzip all the camera folders into `root_directory/Cameras_1`.
 * In ``train_dtu.sh``, set `MVS_TRAINING` as the root directory of dataset; set `--logdir` as the directory to store the checkpoints. 
 * Train the model by running `bash train_dtu.sh`.
 

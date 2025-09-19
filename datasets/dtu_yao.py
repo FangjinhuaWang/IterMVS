@@ -148,8 +148,6 @@ class MVSDataset(Dataset):
         proj_matrices_2 = []
         proj_matrices_3 = []
 
-
-
         for i, vid in enumerate(view_ids):
             img_filename = os.path.join(self.datapath,
                                     'Rectified/{}_train/rect_{:0>3}_{}_r5000.png'.format(scan, vid + 1, light_idx))
